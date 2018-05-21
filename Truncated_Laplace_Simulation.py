@@ -11,6 +11,7 @@ def trunc_laplace_simulation(data,corrmat,maxiter):
 	
     Attributes:
         data (array-type): columns as variables
+		corrmat (array-type): correlation matrix
         maxiter (int): determines the max number of shuffles to Van der Waerden matrix
 
     Todo:
