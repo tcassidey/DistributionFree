@@ -1,0 +1,67 @@
+def trunc_laplace_simulation(data,corrmat,maxiter):
+    """
+    This function is converted from the simulatemvMatrix function of the R package EnvStats. 
+    The algorithm is from the 1982 paper by Iman and Coover: 
+    "A distribution-free approach to inducing rank correlation among input variables". 
+    
+    The algorithm is outlined in more detail in the R documentation: 
+    https://www.rdocumentation.org/packages/EnvStats/versions/2.3.0/topics/simulateMvMatrix
+	
+	Specifically this simulation uses a truncated Laplacian distribution for all random draws.
+	
+    Attributes:
+        data (array-type): columns as variables
+        maxiter (int): determines the max number of shuffles to Van der Waerden matrix
+
+    Todo:
+        * Example
+        * Multiple distributions
+        * non-truncated distributions
+        
+    Dependencies:
+        numpy, scipy
+    """
+    n = np.shape(data)[0] #iterations
+    k = np.shape(data)[1] #variables
+    
+    def trunc_laplace_rv(mu, b, low, high, size):
+        rnd_cdf = np.random.uniform(laplace.cdf(x=low, loc = mu, scale=b),  #returns cdf of lowpoint
+                                    laplace.cdf(x=high, loc = mu, scale=b), #returns cdf of highpoint 
+                                    size=size)
+        return laplace.ppf(q=rnd_cdf, loc = mu, scale=b) #draws inverse of known cdf with ~U random numbers
+    
+    
+    P = np.transpose(np.linalg.cholesky(corrmat)) #performs Cholesky decomposition on correlation matrix
+    R = np.transpose(np.matrix([[norm.ppf(x/(n+1)) for x in range(1,n+1)]]*k)) #creates matrix of VdW scores
+    
+    
+    tolrecipcondnum = np.finfo(float).eps #machine precision
+    corrRposdef = False #variable to determine if shuffled VdW matrix is positive definite
+    i = 1
+    while ((corrRposdef == False) & (i <= maxiter)): 
+        for col in range(k):
+            np.random.shuffle(R[:,col]) 
+        corrR =  np.corrcoef(R,rowvar=False)
+        eigenvals,eigvectors = np.linalg.eigh(corrR) 
+        if (all(eigenvals > 0) & ((min(eigenvals)/max(eigenvals)) >=  tolrecipcondnum)): #is the matrix positive definite
+            corrRposdef = True                              
+        i = i + 1
+    if (i > maxiter):
+        print('Non Positive Defitnite Correlation Matrix, increase maxiter')
+        return
+
+
+    Q = np.transpose(np.linalg.cholesky(corrR))
+    R = np.matmul(R,np.transpose(np.matmul(P,np.linalg.solve(Q,np.identity(len(Q))))))
+
+    final_m = np.zeros((n,k))
+    for col in range(k):
+        mu = np.average(data[:,col])
+        b = np.std(data[:,col])
+        low = min(data[:,col])
+        high = max(data[:,col])
+        dist = trunc_laplace_rv(mu,b,low,high,n)
+        dist = np.sort(dist)
+        dist = dist[stats.rankdata(R[:,col],method='ordinal')-1]
+        final_m[:,col] = dist
+    return final_m
